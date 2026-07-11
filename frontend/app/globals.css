@@ -1,3 +1,11 @@
+/* Mantine's CSS ships un-layered in this build (its own `@layer mantine`
+   wrapper gets stripped by the bundler), so without this it would beat
+   Tailwind's `@layer utilities` unconditionally regardless of specificity
+   (unlayered CSS always wins over layered CSS) — most visibly, Mantine's
+   `body { font-family }` was clobbering the `.font-kalam` utility on body.
+   Explicitly layering the import here, before Tailwind's own layers are
+   declared, makes Mantine's styles the *lowest*-priority layer instead. */
+@import "@mantine/core/styles.css" layer(mantine);
 @import "tailwindcss";
 
 /* TRACE Hand-Drawn design tokens.
@@ -49,4 +57,25 @@ body {
 }
 .wobble-3 {
   transform: rotate(-2deg);
+}
+
+/* Material Symbols Outlined: default variation settings (unfilled, regular
+ * weight). Matches the landing-page mockup; individual icons can override
+ * FILL via inline style for the "filled" look (e.g. the hero's sensor dot). */
+.material-symbols-outlined {
+  font-variation-settings:
+    "FILL" 0,
+    "wght" 400,
+    "GRAD" 0,
+    "opsz" 24;
+}
+
+/* "Filled" variant for icons that should render solid (e.g. hero's sensor
+ * icon), matching the mockup's inline `font-variation-settings: 'FILL' 1`. */
+.material-symbols-filled {
+  font-variation-settings:
+    "FILL" 1,
+    "wght" 400,
+    "GRAD" 0,
+    "opsz" 24;
 }

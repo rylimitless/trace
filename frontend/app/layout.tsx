@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Kalam } from "next/font/google";
 import { MantineProvider, ColorSchemeScript, mantineHtmlProps } from "@mantine/core";
-import "@mantine/core/styles.css";
 import "./globals.css";
 
 const kalam = Kalam({
@@ -25,6 +24,10 @@ export default function RootLayout({
     <html lang="en" className={kalam.variable} {...mantineHtmlProps}>
       <head>
         <ColorSchemeScript defaultColorScheme="light" />
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+        />
       </head>
       <body className="min-h-screen font-kalam" suppressHydrationWarning>
         <MantineProvider defaultColorScheme="light">
