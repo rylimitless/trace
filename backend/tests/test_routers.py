@@ -170,10 +170,15 @@ def test_capture_is_unauthenticated_and_returns_501(client):
 
 @pytest.mark.parametrize(
     "path",
-    ["/batches", "/contracts", "/payouts", "/demand"],
+    ["/contracts"],
 )
 class TestAdminRoutes:
-    """Admin-only list views: wrong role 403s, admin reaches the 501 stub."""
+    """Admin-only list views: wrong role 403s, admin reaches the 501 stub.
+
+    NOTE: ``/demand``, ``/batches`` and ``/payouts`` were promoted to real
+    handlers in Slice D (return 200, not 501) and are now covered by
+    tests/test_admin_router.py and tests/test_read_endpoints.py.
+    """
 
     def test_wrong_role_buyer_is_403(self, client, path):
         emails = _seed_all_roles(client)
@@ -197,44 +202,68 @@ class TestAdminRoutes:
 
 
 def test_offers_allows_secondary_buyer_only(client):
-    """``GET /offers`` → secondary buyer 501, premium buyer 403, composter 403."""
+    """``GET /offers`` → secondary buyer 200, premium buyer 403, composter 403.
+
+    The handler is real as of Slice D (covered fully by
+    tests/test_read_endpoints.py); here we only assert the role gate and that
+    the secondary buyer reaches a real 200 (empty list with no batches).
+    """
     emails = _seed_all_roles(client)
 
     _login(client, emails[UserRole.secondary_buyer])
-    assert client.get("/offers").status_code == 501
+    assert client.get("/offers").status_code == 200
 
     _login_as_fresh(client, emails[UserRole.premium_buyer])
     assert client.get("/offers").status_code == 403
 
 
 def test_pickups_allows_composter_only(client):
-    """``GET /pickups`` → composter 501, others 403."""
+    """``GET /pickups`` → composter 200, others 403.
+
+    The handler is real as of Slice D (covered fully by
+    tests/test_read_endpoints.py); here we only assert the role gate and that
+    the composter reaches a real 200 (empty list with no batches).
+    """
     emails = _seed_all_roles(client)
 
     _login(client, emails[UserRole.composter])
-    assert client.get("/pickups").status_code == 501
+    assert client.get("/pickups").status_code == 200
 
     _login_as_fresh(client, emails[UserRole.secondary_buyer])
     assert client.get("/pickups").status_code == 403
 
 
 def test_contracts_confirm_allows_premium_buyer_only(client):
-    """``POST /contracts/{id}/confirm`` → premium buyer 501, secondary 403."""
+    """``POST /contracts/{id}/confirm`` → premium buyer 404 (no such contract),
+    secondary 403.
+
+    The handler is real as of Slice D (covered fully by
+    tests/test_contracts_router.py). ``_seed_all_roles`` seeds no contracts,
+    so a confirm on id=1 hits the 404 branch; the role gate still rejects a
+    secondary buyer before any DB lookup.
+    """
     emails = _seed_all_roles(client)
 
     _login(client, emails[UserRole.premium_buyer])
-    assert client.post("/contracts/1/confirm").status_code == 501
+    assert client.post("/contracts/1/confirm").status_code == 404
 
     _login_as_fresh(client, emails[UserRole.secondary_buyer])
     assert client.post("/contracts/1/confirm").status_code == 403
 
 
 def test_batches_dispute_allows_premium_buyer_only(client):
-    """``POST /batches/{id}/dispute`` → premium buyer 501, secondary 403."""
+    """``POST /batches/{id}/dispute`` → premium buyer 404 (no such batch),
+    secondary 403.
+
+    The handler is real as of Slice D (covered fully by
+    tests/test_read_endpoints.py). ``_seed_all_roles`` seeds no batches, so a
+    dispute on id=1 hits the 404 branch; the role gate still rejects a
+    secondary buyer before any DB lookup.
+    """
     emails = _seed_all_roles(client)
 
     _login(client, emails[UserRole.premium_buyer])
-    assert client.post("/batches/1/dispute").status_code == 501
+    assert client.post("/batches/1/dispute").status_code == 404
 
     _login_as_fresh(client, emails[UserRole.secondary_buyer])
     assert client.post("/batches/1/dispute").status_code == 403

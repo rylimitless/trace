@@ -234,6 +234,10 @@ class Route(Base):
         Float, nullable=True
     )
     batch_ids: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Demo-only flag: when True, this route's primary leg is closed (washout)
+    # and the routing engine must recompute to a fallback destination. Spec §13
+    # anomaly 2 (route disruption). Default False.
+    washed_out: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     buyer: Mapped["Buyer"] = relationship("Buyer", foreign_keys=[buyer_id])
 
