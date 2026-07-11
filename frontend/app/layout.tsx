@@ -9,7 +9,13 @@ const kalam = Kalam({
   weight: ["300", "400", "700"],
 });
 
+/* Resolves absolute URLs for social open-graph / twitter images and canonical
+ * links. Set NEXT_PUBLIC_SITE_URL in production; falls back gracefully. */
+const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: "TRACE | Catch Spoilage Early",
   description:
     "Quality-graded, fully traceable produce from Jamaican smallholder farms.",
