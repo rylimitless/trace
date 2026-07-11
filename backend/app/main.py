@@ -9,6 +9,7 @@ from app.routers.contracts import router as contracts_router
 from app.routers.offers import router as offers_router
 from app.routers.payouts import router as payouts_router
 from app.routers.pickups import router as pickups_router
+from app.services import scheduler
 
 app = FastAPI(title="TRACE")
 
@@ -18,6 +19,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+def _start_scheduler() -> None:
+    """Start the handoff scheduler (the demo 'spoilage clock')."""
+    scheduler.start()
 
 # Session auth uses itsdangerous-signed cookies (handled inside app.auth —
 # no SessionMiddleware). The auth router owns login/logout; every other

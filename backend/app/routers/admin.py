@@ -15,9 +15,13 @@ and that it holds, streaming events as they are published.
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
 
 from app.auth import require_admin
+from app.db import get_db
 from app.events import subscribe
+from app.models import Route
+from app.services.aggregation import demand_feed
 
 # Two distinct prefixes share this module: ``/demand`` (no admin prefix) and
 # ``/admin/stream``. We keep one router with no prefix and spell both paths in
@@ -26,9 +30,33 @@ router = APIRouter(tags=["admin"])
 
 
 @router.get("/demand")
-def demand(_=Depends(require_admin)):
-    """Admin-only aggregated demand view. Stub."""
-    raise HTTPException(status_code=501, detail="Not implemented")
+def demand(db: Session = Depends(get_db), _=Depends(require_admin)):
+    """Admin-only aggregated demand view (spec §4).
+
+    Simple pass-through of :func:`app.services.aggregation.demand_feed`: the
+    anonymized ``{crop, grade, qty_band, urgency}`` feed with no buyer identity.
+    """
+    return demand_feed(db)
+
+
+@router.post("/admin/demo/route-disruption")
+def route_disruption(db: Session = Depends(get_db), _=Depends(require_admin)):
+    """Demo toggle (spec §13 anomaly 2): wash out the primary Route.
+
+    Flips the FIRST Route's ``washed_out`` to True so the next
+    ``decide_route``/``run_handoff`` takes the route-disruption branch and
+    reroutes to the fallback composter. 404 if no Route exists.
+    """
+    route = db.query(Route).first()
+    if route is None:
+        raise HTTPException(status_code=404, detail="No route found")
+    route.washed_out = True
+    db.commit()
+    return {
+        "route_id": route.id,
+        "washed_out": True,
+        "detail": "primary route disrupted — next handoff reroutes to fallback composter",
+    }
 
 
 async def _event_generator():
