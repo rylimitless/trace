@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/handdrawn/Button";
 import { Card } from "@/components/handdrawn/Card";
@@ -225,13 +226,16 @@ function Hero() {
         {/* Background decorative tilted outline */}
         <div className="wobble-3 absolute -inset-4 -z-10 rounded-card border-2 border-primary opacity-10" />
 
-        {/* Illustration placeholder */}
+        {/* Illustration */}
         <div className="relative mt-16">
-          <div className="h-48 w-full -rotate-1 transform overflow-hidden rounded-card border-2 border-primary bg-white shadow-hard">
-            <div
-              className="h-full w-full bg-gray-300"
-              role="img"
-              aria-label="Hand-drawn illustration of a delivery truck driving through farm fields"
+          <div className="relative h-48 w-full -rotate-1 transform overflow-hidden rounded-card border-2 border-primary bg-white shadow-hard">
+            <Image
+              src="/images/farming.jpeg"
+              alt="Rows of crops growing in a smallholder field"
+              fill
+              className="object-cover"
+              sizes="(min-width: 1024px) 480px, 100vw"
+              priority
             />
           </div>
           <Tape className="left-1/2" />
