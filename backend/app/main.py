@@ -1,3 +1,5 @@
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -14,9 +16,25 @@ from app.services import scheduler
 
 app = FastAPI(title="TRACE")
 
+# CORS: the frontend (Vercel) and backend (Render) are on different origins, and
+# auth uses an httpOnly session cookie. Browsers refuse credentialed
+# cross-origin requests when allow_origins is ["*"], so we list the allowed
+# frontend origins explicitly (comma-separated in CORS_ORIGINS) and enable
+# allow_credentials. Render/local/dev origins are all supported.
+_allowed_origins = [
+    o.strip()
+    for o in os.environ.get(
+        "CORS_ORIGINS",
+        # sensible defaults: local frontend dev + the localhost backend
+        "http://localhost:3000,http://127.0.0.1:3000",
+    ).split(",")
+    if o.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
