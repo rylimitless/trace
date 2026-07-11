@@ -16,28 +16,34 @@ from app.services import scheduler
 
 app = FastAPI(title="TRACE")
 
-# CORS: the frontend (Vercel) and backend (Render) are on different origins, and
-# auth uses an httpOnly session cookie. Browsers refuse credentialed
-# cross-origin requests when allow_origins is ["*"], so we list the allowed
-# frontend origins explicitly (comma-separated in CORS_ORIGINS) and enable
-# allow_credentials. Render/local/dev origins are all supported.
-_allowed_origins = [
-    o.strip()
-    for o in os.environ.get(
-        "CORS_ORIGINS",
-        # sensible defaults: local frontend dev + the localhost backend
-        "http://localhost:3000,http://127.0.0.1:3000",
-    ).split(",")
-    if o.strip()
-]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=_allowed_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# CORS: the frontend (Vercel) and backend (Render) are on different origins,
+# and auth uses an httpOnly session cookie. Browsers refuse credentialed
+# cross-origin requests when allow_origins is ["*"], so we reflect the request
+# Origin for anything matching CORS_ORIGINS (or a permissive default regex
+# covering Vercel, Render previews, and localhost) and enable credentials.
+_cors_env = os.environ.get("CORS_ORIGINS", "").strip()
+if _cors_env:
+    # Explicit allowlist (comma-separated). Use exact origins for safety.
+    _allowed_origins = [o.strip() for o in _cors_env.split(",") if o.strip()]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_allowed_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    # Default: permissive but credentials-safe. Match localhost, Vercel
+    # (*.vercel.app), and Render previews (*.onrender.com) so the demo works
+    # on first deploy without fiddly CORS config. Tighten by setting
+    # CORS_ORIGINS to your exact frontend URL in production.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=r"^(https?://(?:localhost|127\.0\.0\.1)(?::\d+)?|https://[a-z0-9-]+\.vercel\.app|https://[a-z0-9-]+\.onrender\.com)$",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 
 @app.on_event("startup")

@@ -1,0 +1,60 @@
+# Render Blueprint — deploys the TRACE backend (web service) and the Telegram
+# bot (background worker) together from this repo. Both auto-deploy on push to
+# main. See https://render.com/docs/blueprint-spec
+#
+# First deploy: Render reads this file and creates both services. Set the
+# shared env vars (DATABASE_URL, TELEGRAM_BOT_TOKEN, etc.) on the backend
+# service, and the bot will inherit the ones it needs via its own env block.
+# The Postgres database is created separately in the Render dashboard and its
+# internal URL referenced via the `trace-db` database name below.
+
+databases:
+  - name: trace-db
+    databaseName: tracedb
+    user: trace
+    plan: free
+
+services:
+  # ── Backend (FastAPI web service) ──────────────────────────────────────
+  - type: web
+    name: trace-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: trace-db
+          property: connectionString
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: OPENROUTER_API_KEY
+        sync: false # set manually in the dashboard
+      - key: OPENROUTER_MODEL
+        value: google/gemini-2.5-flash
+      - key: LLM_JUSTIFICATION_MODEL
+        value: openai/gpt-4o-mini
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false # set manually (shared with the bot)
+      - key: CORS_ORIGINS
+        sync: false # set to your Vercel frontend URL, e.g. https://trace.vercel.app
+
+  # ── Telegram bot (background worker — polls, no inbound HTTP) ──────────
+  - type: worker
+    name: trace-bot
+    runtime: docker
+    dockerfilePath: ./messager/telegram_bot/Dockerfile
+    dockerContext: ./messager/telegram_bot
+    plan: free
+    autoDeploy: true
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false # same token as the backend
+      - key: BACKEND_URL
+        fromService:
+          type: web
+          name: trace-backend
+          property: hostPortUrlParams
