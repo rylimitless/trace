@@ -150,14 +150,14 @@ function Hero() {
           farms, sourced reliably enough for your menu or your shelf.
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-8">
-          <Link href="/login">
+          <a href={TELEGRAM_BOT_URL} target="_blank" rel="noreferrer">
             <Button variant="accent" className="wobble-1 text-xl">
               <span className="material-symbols-outlined text-xl">
                 chevron_right
               </span>
               Get supply
             </Button>
-          </Link>
+          </a>
           <Button
             variant="white"
             className="wobble-2 text-xl"
@@ -545,8 +545,10 @@ function CtaBand() {
         </p>
         <a href={TELEGRAM_BOT_URL} target="_blank" rel="noreferrer">
           <Button variant="accent" className="wobble-1 mx-auto text-2xl">
-            <span className="material-symbols-outlined text-2xl">send</span>
-            Launch Telegram Bot
+            <span className="material-symbols-outlined text-2xl">
+              chevron_right
+            </span>
+            Get supply
           </Button>
         </a>
       </div>
