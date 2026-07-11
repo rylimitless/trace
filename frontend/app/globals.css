@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+/* TRACE Hand-Drawn design tokens.
+   Tailwind v4 uses a CSS-first config: tokens declared in an @theme block
+   compile directly into utility classes (no tailwind.config.ts needed).
+   Namespace mapping: color tokens become bg and text utilities,
+   radius tokens become rounded utilities, shadow tokens become shadow
+   utilities, font tokens become font utilities. */
+@theme {
+  --color-primary: #1a1a1a;
+  --color-accent: #E24B4A;
+  --color-paper: #FAF9F6;
+  --color-outline: #1a1a1a;
+
+  /* Grade badges */
+  --color-success: #22c55e;
+  --color-success-light: #f0fdf4;
+  --color-neutral: #6b7280;
+  --color-neutral-light: #f3f4f6;
+
+  --radius-card: 8px;
+
+  --shadow-hard: 4px 4px 0 0 #1a1a1a;
+
+  --font-kalam: var(--font-kalam-google), cursive;
+}
+
+body {
+  background-color: var(--color-paper);
+  background-image: radial-gradient(#1a1a1a22 1.5px, transparent 1.5px);
+  background-size: 18px 18px;
+  color: var(--color-primary);
+}
+
+/* Hand-drawn "press" micro-interaction: paired with shadow-hard, the card
+ * appears to physically depress into the page on click/tap. */
+.active-press:active {
+  transform: translate(4px, 4px);
+  box-shadow: 0 0 0 0 #1a1a1a;
+}
