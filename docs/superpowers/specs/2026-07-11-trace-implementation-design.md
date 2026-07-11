@@ -50,10 +50,14 @@ trace/
         payouts.py             #   payout reads (orchestration fills)
         admin.py               #   audit timeline, SSE stream (core stubs, all fill)
       services/                # the slice logic, imported by routers
-        grading.py             #   grade() + simulate_decay()  (grading slice)
-        routing.py             #   decide_route() + payout math  (orchestration slice)
-        messaging.py           #   Telegram send/receive        (intake slice)
-        aggregation.py         #   pooling + contract matching  (orchestration slice)
+        grading.py             #   grade() + simulate_decay()           (grading slice, C)
+        routing.py             #   decide_route() + payout math         (orchestration slice, D)
+        scheduler.py           #   background task: gates shipped→graded_handoff ('spoilage clock')  (D)
+        handoff.py             #   the handoff re-grade step (pulls photo, decay+grade, fires decide_route)  (D)
+        messaging.py           #   Telegram send/receive + send_farmer_update()  (intake slice, B)
+        aggregation.py         #   pooling + contract matching + demand-feed derivation  (D)
+      photos/                  # photo storage (files or object store) — written by B's capture endpoint,
+                               #   read via get_batch_photo(batch) seam (used by D's handoff step)
       tests/
   frontend/
     package.json               # next, react, @mantine/core, zustand, tailwindcss
@@ -113,10 +117,10 @@ Each slice branches off `main` after Phase 0 lands, codes against the contracts 
 **Tech:** Telegram Bot API (webhook), FastAPI.
 **Deliverables:**
 - Telegram webhook handler: receives intent ("harvest 10kg tomatoes"), resolves/creates the `Farmer` (by `telegram_chat_id`), creates a `Batch` at `HARVESTED`, replies with the one-tap `/capture/{token}` link.
-- `POST /capture/{token}` upload endpoint: accepts the photo, stores it, and advances `harvested→graded_farm` (then triggers grading via Slice C's `grade()`).
-- `services/messaging.py` → `send_message(chat_id, text)`: the single outbound channel. The grade, the reroute reason, the payout — all sent to the farmer through this. **Visibility rule (product spec §4a):** all farmer-facing messages are **grade + outcome + buyer-type-category** framed (e.g. "sold at the Grade B price to the secondary market"), never naming a specific buyer, contract, or destination.
+- `POST /capture/{token}` upload endpoint: accepts the photo, **stores it under `photos/`** (this storage + the `get_batch_photo(batch)` read seam is owned by B), then advances `harvested→graded_farm`. The **farm grade** is computed inline by calling Slice C's `grade()` and written to `farm_grade` + `grade_reason_farm`. (The more complex **handoff** re-grade is owned by Slice D, not B — see Slice D.)
+- `services/messaging.py` → `send_message(chat_id, text)` and `send_farmer_update(chat_id, payout_or_event)`: the single outbound channel. The grade, the reroute reason, the payout — all sent to the farmer through this. **Visibility rule (product spec §4a):** all farmer-facing messages are **grade + outcome + buyer-type-category** framed (e.g. "sold at the Grade B price to the secondary market"), never naming a specific buyer, contract, or destination. The category is read directly from the payout/view model produced by Slice D — B does **not** map destination→category.
 - **Demand-feed messaging:** on intent (and on request, e.g. "what's needed?"), the bot messages the farmer the **anonymized demand feed** — crop + grade + rough quantity + urgency, derived by Slice D from open contracts (no buyer/price/contract-id). This is the *only* demand signal a farmer gets (there is no farmer web UI).
-**Hand-off:** imports `grade(image, crop)` from Slice C; calls `batch.transition()` from core.
+**Hand-off:** imports `grade(image, crop)` from Slice C; calls `batch.transition()` from core; **exports `get_batch_photo(batch) -> bytes`** (the photo-storage read seam Slice D's handoff step depends on).
 
 ### Slice C — Grading & Decay
 
@@ -134,12 +138,14 @@ Each slice branches off `main` after Phase 0 lands, codes against the contracts 
 **Tech:** plain Python rules engine + one LLM call (justification).
 **Deliverables:**
 - `services/aggregation.py`: pool `GRADED_FARM` batches by crop + grade + geo into a `VirtualShipment` against a `Contract`; compute each batch's `%` contribution. Also derives the **anonymized demand feed** (crop + grade + rough qty + urgency) from open contracts — with no buyer/price/contract-id — for Slice B to message to farmers and for `GET /demand` (used by the admin view).
-- Contract matching + the HITL confirm transition (`pooled→contracted` blocked until buyer confirms).
-- `contracted→shipped` (assign `Route`) → `shipped→graded_handoff` (calls Slice C's `grade(simulate_decay(original))`). **"Spoilage clock" is MVP-simple:** there is no real wall-clock timer — the seeded decay-triggered batch is marked at seed time to decay on its handoff pass, and a short `asyncio.sleep` (a few seconds, for demo pacing) gates the `shipped→graded_handoff` transition. A real shelf-life timer is roadmap.
+- Contract matching + the HITL confirm transition (`pooled→contracted` blocked until buyer confirms). `contracted→shipped` (assign `Route`).
+- **`services/scheduler.py` — the "spoilage clock" home:** a background task that, after `contracted→shipped`, waits a few seconds (`asyncio.sleep`, for demo pacing — there is no real wall-clock timer in the MVP; the seeded decay-triggered batch is marked at seed time to decay) then triggers the handoff step. A real shelf-life timer is roadmap.
+- **`services/handoff.py` — Slice D owns the entire handoff re-grade step:** pulls the stored photo via Slice B's `get_batch_photo(batch)` seam, runs Slice C's `simulate_decay` + `grade`, writes `handoff_grade` + `grade_reason_handoff` and advances `shipped→graded_handoff`, then calls `decide_route`. This is the three-slice interaction (B photo → C decay+grade → D routing) and it has one owner: D.
 - `services/routing.py` → `decide_route(batch, handoff_grade, contract, buyers) -> RoutingDecision`: the deterministic rules engine (product spec §10), including returning-leg preference via straight-line lat/lng. Drives `graded_handoff→{delivered | rerouted | composted}` and the `rerouted→delivered_secondary` transition.
-- Payout math (product spec §11): farmer payout at delivered grade × destination price/kg; recompute `%` and contract fulfillment on reroute; zero-amount payout on compost; buyer-side short/refund logic. Drives `→paid` transitions.
+- Payout math (product spec §11): farmer payout at delivered grade × destination price/kg; recompute `%` and contract fulfillment on reroute; zero-amount payout on compost; buyer-side short/refund logic. Drives `→paid` transitions. **Payout rows / view models carry a `market_category`** (`premium_market | secondary_market | composted`) — the buyer-type category Slice B reads for farmer messages, so the visibility rule holds at the data layer and B never maps a destination.
 - Routing-justification LLM call: turns `{reason_code, from, to, facts}` into the logged justification + the farmer message text (passed to Slice B's `send_message`).
-**Hand-off:** imports `grade()`/`simulate_decay()` from Slice C and `send_message()` from Slice B; calls `batch.transition()` from core.
+- **Endpoints owned by D** (the routing/payout data they expose): `GET /offers` (secondary buyer's incoming reroute offers), `GET /pickups` (composter's waste pickups), `POST /batches/{id}/dispute` (premium buyer flags a delivered batch → `DISPUTED`).
+**Hand-off:** imports `grade()`/`simulate_decay()` from Slice C, `get_batch_photo()` + `send_message()` from Slice B; calls `batch.transition()` from core.
 
 ---
 
@@ -158,13 +164,20 @@ simulate_decay(image_bytes: bytes) -> bytes
 decide_route(batch, handoff_grade, contract, buyers) -> RoutingDecision
     # deterministic; sets the transition + writes RoutingDecision + triggers payout
 compute_payout(batch, destination, price_per_kg) -> Payout
-    # creates/updates the Payout row; recompute on reroute
+    # creates/updates the Payout row; recompute on reroute.
+    # INTERNAL only — destination never reaches farmers. The Payout/View
+    # also carries market_category (below), which is what B reads.
+run_handoff(batch) -> None
+    # D's owned handoff step: get_batch_photo -> simulate_decay -> grade
+    # -> write handoff_grade -> shipped->graded_handoff -> decide_route
 
 # Slice B exports (Intake)
 send_message(chat_id: str, text: str) -> None
     # the single outbound Telegram channel
-POST /capture/{token}   -> accepts photo, advances harvested->graded_farm, triggers grade()
-POST /telegram/webhook  -> receives inbound messages
+send_farmer_update(chat_id, event) -> None
+    # formats a farmer-facing update using ONLY grade + outcome + market_category
+get_batch_photo(batch) -> bytes
+    # photo-storage read seam; D's handoff step uses this to fetch the farm photo
 
 # Core exports (Phase 0)
 Batch.transition(dest: State, **ctx) -> None   # the ONLY way state changes
@@ -177,13 +190,17 @@ GET  /batches               -> all batches                       [require_admin]
 GET  /contracts             -> all contracts                     [require_admin]
 GET  /contracts/mine        -> WHERE buyer_id = current_user     [require_buyer(premium)]
 POST /contracts/{id}/confirm                                    [require_buyer(premium), owns contract]
-GET  /offers                -> incoming reroute offers           [require_buyer(secondary)]
-GET  /pickups               -> waste pickups                     [require_composter]
-GET  /payouts               -> payouts                           [require_admin]
-POST /capture/{token}       -> upload photo (token-gated, no login)
+POST /batches/{id}/dispute  -> delivered->disputed               [require_buyer(premium), owns batch]  (D)
+GET  /offers                -> incoming reroute offers           [require_buyer(secondary)]  (D)
+GET  /pickups               -> waste pickups                     [require_composter)]  (D)
+GET  /payouts               -> payouts (carry market_category)   [require_admin]
+POST /capture/{token}       -> upload photo (token-gated, no login)  (B)
+POST /telegram/webhook      -> receives inbound messages         (B)
 GET  /demand                -> anonymized demand feed [{crop,grade,qty_band,urgency}]  [require_admin]
                               (the same feed is messaged to farmers by Slice B)
 ```
+
+**Payout / view-model field (owned by D):** `market_category: "premium_market" | "secondary_market" | "composted"` — the buyer-type category Slice B reads for farmer messages. This is how the visibility rule (product spec §4a) holds at the data layer: the destination is internal, the category is what crosses into farmer-facing code.
 
 **The single rule that keeps merges clean:** `batch.status` is mutated **only** inside `Batch.transition()`, in core. Every slice calls `transition()`. No slice writes `batch.status = "..."` directly. This guarantees the four slice branches never conflict on the most-contended field.
 
