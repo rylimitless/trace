@@ -1,2 +1,7 @@
 .superpowers/
 .remember/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
