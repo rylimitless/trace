@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.db import get_db
@@ -30,7 +30,7 @@ router = APIRouter(tags=["capture"])
 
 
 @router.post("/capture/{token}")
-def capture(token: str, file: UploadFile, db: Session = Depends(get_db)):
+def capture(token: str, file: UploadFile = File(...), db: Session = Depends(get_db)):
     """Farmer uploads a capture for a batch, authenticated by the URL token.
 
     The token must match a ``Batch.capture_token`` and must not be expired
