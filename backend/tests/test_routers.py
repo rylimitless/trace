@@ -153,14 +153,17 @@ def test_gated_route_unauthenticated_is_401(client, method, path):
     assert resp.status_code == 401
 
 
-def test_capture_is_unauthenticated_and_returns_501(client):
+def test_capture_is_unauthenticated_and_reaches_handler(client):
     """``POST /capture/{token}`` has no session gate — the token is the auth.
 
-    The request reaches the handler and gets the stub's 501 (not 401), proving
-    the route is intentionally open at the transport layer.
+    The route is intentionally open at the transport layer: a request with no
+    session cookie is NOT 401. The handler is real as of Slice B, so posting
+    with no file reaches FastAPI's request validation (422 for the missing
+    ``file`` field), not the old 501 stub. Asserting 422 (not 401) proves the
+    request cleared auth and hit the handler's signature.
     """
     resp = client.post("/capture/any-token")
-    assert resp.status_code == 501
+    assert resp.status_code == 422
 
 
 # ---------------------------------------------------------------------------

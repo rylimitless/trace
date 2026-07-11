@@ -9,6 +9,7 @@ from app.routers.contracts import router as contracts_router
 from app.routers.offers import router as offers_router
 from app.routers.payouts import router as payouts_router
 from app.routers.pickups import router as pickups_router
+from app.routers.telegram import router as telegram_router
 from app.services import scheduler
 
 app = FastAPI(title="TRACE")
@@ -40,6 +41,7 @@ app.include_router(contracts_router)
 app.include_router(payouts_router)
 app.include_router(offers_router)
 app.include_router(pickups_router)
+app.include_router(telegram_router)
 app.include_router(capture_router)
 app.include_router(admin_router)
 

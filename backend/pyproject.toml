@@ -13,6 +13,7 @@ dependencies = [
     "itsdangerous",
     "httpx",
     "pillow",
+    "python-multipart>=0.0.32",
 ]
 
 [project.optional-dependencies]

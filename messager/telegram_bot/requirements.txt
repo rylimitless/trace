@@ -1,1 +1,2 @@
-python-telegram-bot --upgrade
+python-telegram-bot
+httpx
